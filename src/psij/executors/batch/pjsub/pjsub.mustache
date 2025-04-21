@@ -1,0 +1,103 @@
+#!/bin/bash
+
+{{#job.name}}
+#PJM --name="{{.}}"
+{{/job.name}}
+
+{{#custom_attributes}}
+    {{#node_shape}}
+#PJM -L "{{key}}={{value}}"
+    {{/node_shape}}
+{{/custom_attributes}}
+
+{{#job.spec.attributes}}
+    {{#duration}}
+#PJM -L "elapse={{.}}"
+    {{/duration}}
+
+    {{#queue_name}}
+#PJM -L "rscgrp={{.}}"
+    {{/queue_name}}
+{{/job.spec.attributes}}
+
+{{#custom_attributes}}
+    {{#mpi_shape}}
+#PJM --mpi "{{key}}={{value}}"
+    {{/mpi_shape}}
+{{/custom_attributes}}
+
+{{#job.spec.resources}}
+    {{#process_count}}
+#PJM --mpi "proc={{.}}"
+    {{/process_count}}
+
+    {{#process_per_node}}
+#PJM --mpi "max-proc-per-node={{.}}"
+    {{/process_per_node}}
+{{/job.spec.resources}}
+
+{{#custom_attributes}}
+    {{#group}}
+#PJM -g {{value}}
+    {{/group}}
+
+    {{#pjsub_env}}
+#PJM -x {{key}}={{value}}
+    {{/pjsub_env}}
+
+    {{#pjsub_others}}
+#PJM {{value}}
+    {{/pjsub_others}}
+{{/custom_attributes}}
+
+#### send output to null
+#PJM -e /dev/null
+#PJM -o /dev/null
+
+{{#job.spec.resources}}
+    {{#cpu_cores_per_process}}
+export OMP_NUM_THREADS={{.}}
+    {{/cpu_cores_per_process}}
+{{/job.spec.resources}}
+
+{{#env}}
+export {{name}}={{value}}
+{{/env}}
+
+
+
+{{!Unlike PBS, Slurm only lists the nodes once in the nodelist, so, to bring it to uniform PBS
+form, we need to duplicate each node line by PPN, which we need to calculate}}
+{{#job.spec.resources}}
+    {{#process_per_node}}
+_PSIJ_PPN={{.}}
+    {{/process_per_node}}
+{{/job.spec.resources}}
+
+PSIJ_NODEFILE="{{psij.script_dir}}/$PJM_JOBID.nodefile"
+if [ "$_PSIJ_PPN" == "" ]; then
+    pjshowip >"$PSIJ_NODEFILE"
+else
+    pjshowip | while read NODE; do for _ in $(seq 1 1 $_PSIJ_PPN); do echo "$NODE"; done; done > "$PSIJ_NODEFILE"
+fi
+export PSIJ_NODEFILE
+
+#######################################################
+
+########### Command section ###########
+
+{{!redirect output here instead of through #PJM directive since PJM_JOBID is not available
+when the directives are evaluated; the reason for using the job id in the first place being the
+same as for the exit code file.}}
+exec &>> "{{psij.script_dir}}/$PJM_JOBID.out"
+
+{{#psij.launch_command}}{{.}} {{/psij.launch_command}}
+
+#######################################################
+
+########### Get the output ###########
+
+{{!we redirect to a file tied to the native ID so that we can reach the file with attach().}}
+echo "$?" > "{{psij.script_dir}}/$PJM_JOBID.ec"
+
+#######################################################
