@@ -167,14 +167,14 @@ class PJsubJobExecutor(BatchSchedulerExecutor):
         # we were to use arrays, this would return one ID for the entire array rather than
         # listing each element of the array independently
         #return [_SQUEUE_COMMAND, '-O', 'JobArrayID,StateCompact,Reason', '-t', 'all', '--me']
-        return [_PJSTAT_COMMAND, '--choose', 'jid,st,ermsg', '-v']
+        return [_PJSTAT_COMMAND, '--choose', 'jid,st,ermsg', '-v', '&&', '(', _PJSTAT_COMMAND, '--history', '--choose', 'jid,st,ermsg', '-v', '|', 'tail -n +2', ')']
 
     def parse_status_output(self, exit_code: int, out: str) -> Dict[str, JobStatus]:
         """See :meth:`~.BatchSchedulerExecutor.parse_status_output`."""
         #check_status_exit_code(_SQUEUE_COMMAND, exit_code, out)
         check_status_exit_code(_PJSTAT_COMMAND, exit_code, out)
         r = {}
-        lines = iter(out.split('\n'))
+        lines = iter(out.split('\n')[:-1])
         # skip header
         lines.__next__()
         for line in lines:
@@ -204,7 +204,7 @@ class PJsubJobExecutor(BatchSchedulerExecutor):
 
     def job_id_from_submit_output(self, out: str) -> str:
         """See :meth:`~.BatchSchedulerExecutor.job_id_from_submit_output`."""
-        return out.strip().split()[-1]
+        return out.strip().split()[-2]
 
     def _format_duration(self, d: timedelta) -> str:
         # https://slurm.schedmd.com/sbatch.html#OPT_time:
